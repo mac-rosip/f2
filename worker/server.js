@@ -15,38 +15,37 @@ const SEED_PRIVATE_KEY = process.env.SEED_PRIVATE_KEY;
 const SEED_PUBLIC_KEY = process.env.SEED_PUBLIC_KEY;
 const PROFANITY_PATH = process.env.PROFANITY_PATH || '/app/profanity2/profanity2.x64';
 const TIMEOUT_SECONDS = parseInt(process.env.TIMEOUT_SECONDS || '300');
+const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || '1000');
 
 const CURVE_ORDER = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
 
 let currentJob = null;
 let isProcessing = false;
 
-// Register with coordinator
-async function register() {
-  const myUrl = `http://${WORKER_ID}:${PORT}`;
+// Poll coordinator for jobs
+async function pollForJob() {
+  if (isProcessing) return;
+  
   try {
-    await axios.post(`${COORDINATOR_URL}/api/worker/register`, {
-      workerId: WORKER_ID,
-      url: myUrl
+    const res = await axios.post(`${COORDINATOR_URL}/api/worker/poll`, {
+      workerId: WORKER_ID
     });
-    console.log(`Registered with coordinator as ${WORKER_ID}`);
+    
+    if (res.data.job) {
+      const { jobId, pattern, webhookData } = res.data.job;
+      console.log(`Received job ${jobId}, pattern: ${pattern}`);
+      processJob(jobId, pattern, webhookData);
+    }
   } catch (err) {
-    console.error('Failed to register with coordinator:', err.message);
-    setTimeout(register, 5000);
+    if (err.code !== 'ECONNREFUSED') {
+      console.error('Poll failed:', err.message);
+    }
   }
 }
 
-// Heartbeat
-setInterval(async () => {
-  try {
-    await axios.post(`${COORDINATOR_URL}/api/worker/heartbeat`, {
-      workerId: WORKER_ID
-    });
-  } catch (err) {
-    console.error('Heartbeat failed:', err.message);
-    register();
-  }
-}, 10000);
+// Start polling
+setInterval(pollForJob, POLL_INTERVAL);
+console.log(`Worker ${WORKER_ID} polling ${COORDINATOR_URL} every ${POLL_INTERVAL}ms`);
 
 function runProfanity(pattern, seedPublicKey, webhookData = {}) {
   return new Promise((resolve, reject) => {
@@ -140,20 +139,11 @@ function publicKeyToAddress(publicKeyHex) {
   return hash.slice(-20).toString('hex');
 }
 
-// Receive job from coordinator
-app.post('/job', async (req, res) => {
-  if (isProcessing) {
-    return res.status(503).json({ error: 'Worker busy' });
-  }
-  
-  const { jobId, pattern, webhookData } = req.body;
+// Process job
+async function processJob(jobId, pattern, webhookData) {
   currentJob = jobId;
   isProcessing = true;
   
-  console.log(`Received job ${jobId}, pattern: ${pattern}`);
-  res.json({ success: true, message: 'Job accepted' });
-  
-  // Process async
   try {
     const { privateKeyOffset, address, txHash } = await runProfanity(pattern, SEED_PUBLIC_KEY, webhookData);
     console.log(`Found match! Address: 0x${address}`);
@@ -193,7 +183,7 @@ app.post('/job', async (req, res) => {
     isProcessing = false;
     currentJob = null;
   }
-});
+}
 
 // Health check
 app.get('/health', (req, res) => {

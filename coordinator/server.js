@@ -121,6 +121,37 @@ app.post('/api/worker/heartbeat', (req, res) => {
   res.json({ success: true });
 });
 
+// Worker poll for job (pull model)
+app.post('/api/worker/poll', (req, res) => {
+  const { workerId } = req.body;
+  
+  // Register/update worker
+  if (!workers.has(workerId)) {
+    workers.set(workerId, {
+      status: 'idle',
+      lastSeen: Date.now(),
+      currentJob: null
+    });
+    console.log(`Worker registered via poll: ${workerId}`);
+  }
+  
+  const worker = workers.get(workerId);
+  worker.lastSeen = Date.now();
+  
+  // If worker is idle and jobs in queue, assign one
+  if (worker.status === 'idle' && jobQueue.length > 0) {
+    const job = jobQueue.shift();
+    worker.status = 'busy';
+    worker.currentJob = job.jobId;
+    activeJobs.set(job.jobId, { ...job, workerId, dispatchTime: Date.now() });
+    
+    console.log(`Assigned job ${job.jobId} to worker ${workerId} (queue: ${jobQueue.length})`);
+    return res.json({ job: { jobId: job.jobId, pattern: job.pattern, webhookData: job.webhookData } });
+  }
+  
+  res.json({ job: null });
+});
+
 // Worker job completion
 app.post('/api/worker/complete', async (req, res) => {
   const { workerId, jobId, success, result, error } = req.body;
