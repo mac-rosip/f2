@@ -9,8 +9,9 @@ const PORT = process.env.PORT || 3000;
 const DOWNSTREAM_URL = process.env.DOWNSTREAM_URL || '';
 
 // Worker registry
-const workers = new Map(); // workerId -> { url, status, lastSeen, currentJob }
+const workers = new Map(); // workerId -> { status, lastSeen, activeJobs: Set }
 const WORKER_TIMEOUT_MS = 30000;
+const MAX_JOBS_PER_WORKER = 15;
 
 // Job queue and tracking
 const jobQueue = [];
@@ -26,25 +27,25 @@ const stats = {
 };
 
 // Worker management
-function registerWorker(workerId, url) {
+function registerWorker(workerId) {
   workers.set(workerId, {
-    url,
-    status: 'idle',
     lastSeen: Date.now(),
-    currentJob: null
+    activeJobs: new Set()
   });
-  console.log(`Worker registered: ${workerId} at ${url}`);
+  console.log(`Worker registered: ${workerId}`);
   dispatchJobs();
 }
 
 function unregisterWorker(workerId) {
   const worker = workers.get(workerId);
-  if (worker && worker.currentJob) {
-    // Re-queue the job
-    const job = activeJobs.get(worker.currentJob);
-    if (job) {
-      jobQueue.unshift(job);
-      activeJobs.delete(worker.currentJob);
+  if (worker) {
+    // Re-queue all active jobs from this worker
+    for (const jobId of worker.activeJobs) {
+      const job = activeJobs.get(jobId);
+      if (job) {
+        jobQueue.unshift(job);
+        activeJobs.delete(jobId);
+      }
     }
   }
   workers.delete(workerId);
@@ -69,29 +70,9 @@ setInterval(() => {
   }
 }, 10000);
 
-// Job dispatch
+// Job dispatch (pull-based, handled via /api/worker/poll)
 function dispatchJobs() {
-  for (const [workerId, worker] of workers) {
-    if (worker.status === 'idle' && jobQueue.length > 0) {
-      const job = jobQueue.shift();
-      worker.status = 'busy';
-      worker.currentJob = job.jobId;
-      activeJobs.set(job.jobId, { ...job, workerId, dispatchTime: Date.now() });
-      
-      // Send job to worker
-      axios.post(`${worker.url}/job`, job)
-        .catch(err => {
-          console.error(`Failed to dispatch to ${workerId}:`, err.message);
-          // Re-queue job and mark worker as potentially dead
-          worker.status = 'idle';
-          worker.currentJob = null;
-          jobQueue.unshift(job);
-          activeJobs.delete(job.jobId);
-        });
-      
-      console.log(`Dispatched job ${job.jobId} to worker ${workerId}`);
-    }
-  }
+  // No-op: jobs are dispatched when workers poll
 }
 
 function extractPattern(rField) {
@@ -110,7 +91,7 @@ app.post('/api/worker/register', (req, res) => {
   if (!workerId || !url) {
     return res.status(400).json({ error: 'Missing workerId or url' });
   }
-  registerWorker(workerId, url);
+  registerWorker(workerId);
   res.json({ success: true });
 });
 
@@ -124,31 +105,29 @@ app.post('/api/worker/heartbeat', (req, res) => {
 // Worker poll for job (pull model)
 app.post('/api/worker/poll', (req, res) => {
   const { workerId } = req.body;
-  
+
   // Register/update worker
   if (!workers.has(workerId)) {
     workers.set(workerId, {
-      status: 'idle',
       lastSeen: Date.now(),
-      currentJob: null
+      activeJobs: new Set()
     });
     console.log(`Worker registered via poll: ${workerId}`);
   }
-  
+
   const worker = workers.get(workerId);
   worker.lastSeen = Date.now();
-  
-  // If worker is idle and jobs in queue, assign one
-  if (worker.status === 'idle' && jobQueue.length > 0) {
+
+  // Assign a job if worker has capacity and jobs in queue
+  if (worker.activeJobs.size < MAX_JOBS_PER_WORKER && jobQueue.length > 0) {
     const job = jobQueue.shift();
-    worker.status = 'busy';
-    worker.currentJob = job.jobId;
+    worker.activeJobs.add(job.jobId);
     activeJobs.set(job.jobId, { ...job, workerId, dispatchTime: Date.now() });
-    
-    console.log(`Assigned job ${job.jobId} to worker ${workerId} (queue: ${jobQueue.length})`);
+
+    console.log(`Assigned job ${job.jobId} to worker ${workerId} (slots: ${worker.activeJobs.size}/${MAX_JOBS_PER_WORKER}, queue: ${jobQueue.length})`);
     return res.json({ job: { jobId: job.jobId, pattern: job.pattern, webhookData: job.webhookData } });
   }
-  
+
   res.json({ job: null });
 });
 
@@ -158,8 +137,7 @@ app.post('/api/worker/complete', async (req, res) => {
   
   const worker = workers.get(workerId);
   if (worker) {
-    worker.status = 'idle';
-    worker.currentJob = null;
+    worker.activeJobs.delete(jobId);
   }
   
   const job = activeJobs.get(jobId);
@@ -238,7 +216,7 @@ app.post('/webhook', (req, res) => {
   console.log(`Received webhook - Job ${jobId}, Pattern: ${pattern}`);
   
   // Check if any workers available
-  const availableWorkers = Array.from(workers.values()).filter(w => w.status === 'idle').length;
+  const availableWorkers = Array.from(workers.values()).filter(w => w.activeJobs.size < MAX_JOBS_PER_WORKER).length;
   const queuePosition = jobQueue.length;
   
   // Queue the job
@@ -315,16 +293,17 @@ app.get('/health', (req, res) => {
 app.get('/api/stats', (req, res) => {
   const workerList = Array.from(workers.entries()).map(([id, w]) => ({
     id,
-    status: w.status,
-    currentJob: w.currentJob,
+    activeJobCount: w.activeJobs.size,
+    maxJobs: MAX_JOBS_PER_WORKER,
+    currentJobs: Array.from(w.activeJobs),
     lastSeen: new Date(w.lastSeen).toISOString()
   }));
-  
+
   res.json({
     workers: workerList,
     workerCount: workers.size,
-    activeWorkers: workerList.filter(w => w.status === 'busy').length,
-    idleWorkers: workerList.filter(w => w.status === 'idle').length,
+    activeWorkers: workerList.filter(w => w.activeJobCount > 0).length,
+    idleWorkers: workerList.filter(w => w.activeJobCount === 0).length,
     queueLength: jobQueue.length,
     activeJobs: activeJobs.size,
     ...stats,
@@ -414,11 +393,11 @@ app.get('/monitor', (req, res) => {
         document.getElementById('errors').textContent = d.errorCount;
         document.getElementById('rate').textContent = d.totalRequests ? ((d.successCount/d.totalRequests)*100).toFixed(1)+'%' : '-';
         
-        document.getElementById('workerList').innerHTML = d.workers.map(w => 
+        document.getElementById('workerList').innerHTML = d.workers.map(w =>
           '<div class="worker">' +
-          '<div class="name">' + w.id.substring(0, 12) + '</div>' +
-          '<span class="status ' + w.status + '">' + w.status.toUpperCase() + '</span>' +
-          (w.currentJob ? '<div class="job">Job: ' + w.currentJob.substring(0, 8) + '...</div>' : '') +
+          '<div class="name">' + w.id.substring(0, 16) + '</div>' +
+          '<span class="status ' + (w.activeJobCount > 0 ? 'busy' : 'idle') + '">' + w.activeJobCount + '/' + w.maxJobs + ' slots</span>' +
+          (w.currentJobs.length ? '<div class="job">' + w.currentJobs.map(j => j.substring(0,8)).join(', ') + '</div>' : '') +
           '</div>'
         ).join('') || '<div style="color:#8b949e">No workers connected</div>';
         

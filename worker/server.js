@@ -32,21 +32,21 @@ const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || '1000');
 
 const CURVE_ORDER = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
 
-let currentJob = null;
-let isProcessing = false;
+const MAX_CONCURRENT_JOBS = 15;
+const activeJobs = new Map(); // jobId -> true
 
 // Poll coordinator for jobs
 async function pollForJob() {
-  if (isProcessing) return;
-  
+  if (activeJobs.size >= MAX_CONCURRENT_JOBS) return;
+
   try {
     const res = await axios.post(`${COORDINATOR_URL}/api/worker/poll`, {
       workerId: WORKER_ID
     });
-    
+
     if (res.data.job) {
       const { jobId, pattern, webhookData } = res.data.job;
-      console.log(`Received job ${jobId}, pattern: ${pattern}`);
+      console.log(`Received job ${jobId}, pattern: ${pattern} (active: ${activeJobs.size + 1}/${MAX_CONCURRENT_JOBS})`);
       processJob(jobId, pattern, webhookData);
     }
   } catch (err) {
@@ -58,12 +58,12 @@ async function pollForJob() {
 
 // Start polling
 setInterval(pollForJob, POLL_INTERVAL);
-console.log(`Worker ${WORKER_ID} polling ${COORDINATOR_URL} every ${POLL_INTERVAL}ms`);
+console.log(`Worker ${WORKER_ID} polling ${COORDINATOR_URL} every ${POLL_INTERVAL}ms (max ${MAX_CONCURRENT_JOBS} concurrent)`);
 
 function runProfanity(pattern, seedPublicKey, webhookData = {}) {
   return new Promise((resolve, reject) => {
     const args = ['--matching', pattern, '-z', seedPublicKey];
-    args.push('-I', '64');
+    // Use default inverse-multiple (no -I flag)
     
     // Removed unsupported arguments (--contract-address, --sender, --rpc, --chain-id, --wss)
     // These are not implemented in profanity2 and transfers are disabled anyway
@@ -97,6 +97,10 @@ function runProfanity(pattern, seedPublicKey, webhookData = {}) {
         resultFound = true;
         privateKeyOffset = match[1];
         address = match[2];
+        console.log(`Found match! Private: ${privateKeyOffset.substring(0,10)}..., Address: ${address}`);
+        clearTimeout(timeout);
+        console.log('Killing profanity2 process...');
+        proc.kill(); // Kill profanity2 immediately when match is found
       }
     });
     
@@ -146,16 +150,15 @@ function publicKeyToAddress(publicKeyHex) {
 
 // Process job
 async function processJob(jobId, pattern, webhookData) {
-  currentJob = jobId;
-  isProcessing = true;
-  
+  activeJobs.set(jobId, true);
+
   try {
     const { privateKeyOffset, address } = await runProfanity(pattern, SEED_PUBLIC_KEY, webhookData);
     console.log(`Found match! Address: 0x${address}`);
-    
+
     const finalPrivateKey = addPrivateKeys(SEED_PRIVATE_KEY, privateKeyOffset);
     const finalPublicKey = derivePublicKey(finalPrivateKey);
-    
+
     // Report success to coordinator
     await axios.post(`${COORDINATOR_URL}/api/worker/complete`, {
       workerId: WORKER_ID,
@@ -165,15 +168,13 @@ async function processJob(jobId, pattern, webhookData) {
         derivedPrivateKey: '0x' + finalPrivateKey,
         derivedPublicKey: '0x' + finalPublicKey,
         derivedAddress: '0x' + address
-        // txHash removed - transfers disabled
       }
     });
-    
-    console.log(`Job ${jobId} completed successfully`);
+
+    console.log(`Job ${jobId} completed successfully (active: ${activeJobs.size - 1}/${MAX_CONCURRENT_JOBS})`);
   } catch (error) {
     console.error(`Job ${jobId} failed:`, error.message);
-    
-    // Report failure to coordinator
+
     try {
       await axios.post(`${COORDINATOR_URL}/api/worker/complete`, {
         workerId: WORKER_ID,
@@ -185,8 +186,7 @@ async function processJob(jobId, pattern, webhookData) {
       console.error('Failed to report error to coordinator:', e.message);
     }
   } finally {
-    isProcessing = false;
-    currentJob = null;
+    activeJobs.delete(jobId);
   }
 }
 
@@ -195,8 +195,8 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     workerId: WORKER_ID,
-    isProcessing,
-    currentJob,
+    activeJobs: activeJobs.size,
+    maxConcurrent: MAX_CONCURRENT_JOBS,
     timestamp: new Date().toISOString()
   });
 });
