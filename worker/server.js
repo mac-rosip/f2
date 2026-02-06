@@ -32,7 +32,7 @@ const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || '1000');
 
 const CURVE_ORDER = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
 
-const MAX_CONCURRENT_JOBS = 5;
+const MAX_CONCURRENT_JOBS = 10;
 const activeJobs = new Map(); // jobId -> true
 
 // Poll coordinator for jobs — fill all open slots immediately
