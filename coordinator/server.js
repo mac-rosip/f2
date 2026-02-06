@@ -11,7 +11,7 @@ const DOWNSTREAM_URL = process.env.DOWNSTREAM_URL || '';
 // Worker registry
 const workers = new Map(); // workerId -> { status, lastSeen, activeJobs: Set }
 const WORKER_TIMEOUT_MS = 30000;
-const MAX_JOBS_PER_WORKER = 10;
+const MAX_JOBS_PER_WORKER = 5;
 
 // Job queue and tracking
 const jobQueue = [];
