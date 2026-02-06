@@ -211,5 +211,4 @@ app.get('/health', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Worker ${WORKER_ID} running on port ${PORT}`);
-  register();
 });
