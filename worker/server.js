@@ -4,6 +4,19 @@ const axios = require('axios');
 const { getPublicKey } = require('@noble/secp256k1');
 const crypto = require('crypto');
 const os = require('os');
+const path = require('path');
+const fs = require('fs');
+
+// Load .env file
+try {
+  const envPath = path.join(__dirname, '.env');
+  if (fs.existsSync(envPath)) {
+    fs.readFileSync(envPath, 'utf-8').split('\n').forEach(line => {
+      const [key, ...vals] = line.split('=');
+      if (key && vals.length) process.env[key.trim()] = vals.join('=').trim();
+    });
+  }
+} catch (e) { console.error('Failed to load .env:', e.message); }
 
 const app = express();
 app.use(express.json());
@@ -61,7 +74,7 @@ function runProfanity(pattern, seedPublicKey, webhookData = {}) {
     console.log('Running profanity with args:', args.join(' '));
     
     const proc = spawn(PROFANITY_PATH, args, {
-      cwd: '/app/profanity2'
+      cwd: path.dirname(PROFANITY_PATH)
     });
     
     let stdout = '';
