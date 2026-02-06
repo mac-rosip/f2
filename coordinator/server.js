@@ -77,10 +77,10 @@ function dispatchJobs() {
 
 function extractPattern(rField) {
   const cleaned = rField.toLowerCase().replace(/^0x/, '');
-  const first6 = cleaned.substring(0, 6);
+  const first4 = cleaned.substring(0, 4);
   const last4 = cleaned.substring(cleaned.length - 4);
-  const middleLength = 40 - 6 - 4;
-  return first6 + 'X'.repeat(middleLength) + last4;
+  const middleLength = 40 - 4 - 4;
+  return first4 + 'X'.repeat(middleLength) + last4;
 }
 
 // API Endpoints

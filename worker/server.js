@@ -61,47 +61,48 @@ async function pollForJob() {
 setInterval(pollForJob, POLL_INTERVAL);
 console.log(`Worker ${WORKER_ID} polling ${COORDINATOR_URL} every ${POLL_INTERVAL}ms (max ${MAX_CONCURRENT_JOBS} concurrent)`);
 
+function matchesPattern(address, pattern) {
+  const addr = address.toLowerCase();
+  for (let i = 0; i < pattern.length; i++) {
+    if (pattern[i] !== 'X' && pattern[i].toLowerCase() !== addr[i]) return false;
+  }
+  return true;
+}
+
 function runProfanity(pattern, seedPublicKey, webhookData = {}) {
   return new Promise((resolve, reject) => {
     const args = ['--matching', pattern, '-z', seedPublicKey];
-    // Use default inverse-multiple (no -I flag)
-    
-    // Removed unsupported arguments (--contract-address, --sender, --rpc, --chain-id, --wss)
-    // These are not implemented in profanity2 and transfers are disabled anyway
-    
+
     console.log('Running profanity with args:', args.join(' '));
-    
+
     const proc = spawn(PROFANITY_PATH, args, {
       cwd: path.dirname(PROFANITY_PATH)
     });
-    
+
     let stdout = '';
     let stderr = '';
     let resultFound = false;
-    
+
     const timeout = setTimeout(() => {
       proc.kill();
       reject(new Error(`Timeout after ${TIMEOUT_SECONDS}s`));
     }, TIMEOUT_SECONDS * 1000);
-    
+
     let privateKeyOffset = '';
     let address = '';
-    
+
     proc.stdout.on('data', (data) => {
       const output = data.toString();
       stdout += output;
-      
-      // Transactions are disabled - no txHash to capture
-      
+
       const match = output.match(/Private: 0x([a-f0-9]{64}).*Address: 0x([a-f0-9]{40})/i);
-      if (match && !resultFound) {
+      if (match && !resultFound && matchesPattern(match[2], pattern)) {
         resultFound = true;
         privateKeyOffset = match[1];
         address = match[2];
-        console.log(`Found match! Private: ${privateKeyOffset.substring(0,10)}..., Address: ${address}`);
+        console.log(`Exact match! Address: ${address}`);
         clearTimeout(timeout);
-        console.log('Killing profanity2 process...');
-        proc.kill(); // Kill profanity2 immediately when match is found
+        proc.kill();
       }
     });
     
