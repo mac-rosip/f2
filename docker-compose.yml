@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  coordinator:
+    build:
+      context: ./coordinator
+      dockerfile: Dockerfile
+    container_name: vanity-coordinator
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - DOWNSTREAM_URL=${DOWNSTREAM_URL:-}
+    networks:
+      - vanity-net
+    restart: unless-stopped
+
+  # Worker template - scale with: docker compose up -d --scale worker=N
+  worker:
+    build:
+      context: .
+      dockerfile: ./worker/Dockerfile
+    environment:
+      - PORT=3001
+      - COORDINATOR_URL=http://coordinator:3000
+      - SEED_PRIVATE_KEY=${SEED_PRIVATE_KEY}
+      - SEED_PUBLIC_KEY=${SEED_PUBLIC_KEY}
+      - PROFANITY_PATH=/app/profanity2/profanity2.x64
+      - TIMEOUT_SECONDS=${TIMEOUT_SECONDS:-300}
+    networks:
+      - vanity-net
+    depends_on:
+      - coordinator
+    restart: unless-stopped
+    # GPU support - uncomment for NVIDIA GPUs
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+networks:
+  vanity-net:
+    driver: bridge

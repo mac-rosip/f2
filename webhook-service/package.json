@@ -1,0 +1,14 @@
+{
+  "name": "vanity-address-webhook",
+  "version": "1.0.0",
+  "description": "Webhook service for triggering vanity address generation",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "@noble/secp256k1": "^2.0.0",
+    "axios": "^1.6.0"
+  }
+}

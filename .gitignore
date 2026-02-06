@@ -1,0 +1,31 @@
+# Build artifacts
+*.o
+*.x64
+profanity2/profanity2.x64
+
+# Database
+*.db
+
+# Logs
+*.log
+webhook-service/webhook.log
+
+# Node modules
+webhook-service/node_modules/
+
+# Environment files
+webhook-service/.env
+
+# Cache
+profanity2/.cache/
+profanity2/*.cache
+
+# Temporary files
+*.tmp
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+.env
