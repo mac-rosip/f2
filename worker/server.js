@@ -35,23 +35,24 @@ const CURVE_ORDER = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBF
 const MAX_CONCURRENT_JOBS = 15;
 const activeJobs = new Map(); // jobId -> true
 
-// Poll coordinator for jobs
+// Poll coordinator for jobs — fill all open slots immediately
 async function pollForJob() {
-  if (activeJobs.size >= MAX_CONCURRENT_JOBS) return;
+  while (activeJobs.size < MAX_CONCURRENT_JOBS) {
+    try {
+      const res = await axios.post(`${COORDINATOR_URL}/api/worker/poll`, {
+        workerId: WORKER_ID
+      });
 
-  try {
-    const res = await axios.post(`${COORDINATOR_URL}/api/worker/poll`, {
-      workerId: WORKER_ID
-    });
+      if (!res.data.job) break; // queue empty
 
-    if (res.data.job) {
       const { jobId, pattern, webhookData } = res.data.job;
       console.log(`Received job ${jobId}, pattern: ${pattern} (active: ${activeJobs.size + 1}/${MAX_CONCURRENT_JOBS})`);
       processJob(jobId, pattern, webhookData);
-    }
-  } catch (err) {
-    if (err.code !== 'ECONNREFUSED') {
-      console.error('Poll failed:', err.message);
+    } catch (err) {
+      if (err.code !== 'ECONNREFUSED') {
+        console.error('Poll failed:', err.message);
+      }
+      break;
     }
   }
 }
