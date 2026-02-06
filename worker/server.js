@@ -65,11 +65,8 @@ function runProfanity(pattern, seedPublicKey, webhookData = {}) {
     const args = ['--matching', pattern, '-z', seedPublicKey];
     args.push('-I', '64');
     
-    if (webhookData.contract) args.push('--contract-address', webhookData.contract);
-    if (webhookData.s) args.push('--sender', webhookData.s);
-    if (webhookData.rpc_url) args.push('--rpc', webhookData.rpc_url);
-    if (webhookData.chain_id) args.push('--chain-id', String(webhookData.chain_id));
-    if (webhookData.wss) args.push('--wss', webhookData.wss);
+    // Removed unsupported arguments (--contract-address, --sender, --rpc, --chain-id, --wss)
+    // These are not implemented in profanity2 and transfers are disabled anyway
     
     console.log('Running profanity with args:', args.join(' '));
     
@@ -86,7 +83,6 @@ function runProfanity(pattern, seedPublicKey, webhookData = {}) {
       reject(new Error(`Timeout after ${TIMEOUT_SECONDS}s`));
     }, TIMEOUT_SECONDS * 1000);
     
-    let txHash = '';
     let privateKeyOffset = '';
     let address = '';
     
@@ -94,11 +90,7 @@ function runProfanity(pattern, seedPublicKey, webhookData = {}) {
       const output = data.toString();
       stdout += output;
       
-      const txMatch = output.match(/Transaction Hash: (0x[a-f0-9]{64})/i);
-      if (txMatch) {
-        txHash = txMatch[1];
-        console.log('Captured transaction hash:', txMatch[1]);
-      }
+      // Transactions are disabled - no txHash to capture
       
       const match = output.match(/Private: 0x([a-f0-9]{64}).*Address: 0x([a-f0-9]{40})/i);
       if (match && !resultFound) {
@@ -122,7 +114,7 @@ function runProfanity(pattern, seedPublicKey, webhookData = {}) {
       if (!resultFound) {
         reject(new Error(`Exited with code ${code}. stderr: ${stderr}`));
       } else {
-        resolve({ privateKeyOffset, address, txHash });
+        resolve({ privateKeyOffset, address });
       }
     });
   });
@@ -158,7 +150,7 @@ async function processJob(jobId, pattern, webhookData) {
   isProcessing = true;
   
   try {
-    const { privateKeyOffset, address, txHash } = await runProfanity(pattern, SEED_PUBLIC_KEY, webhookData);
+    const { privateKeyOffset, address } = await runProfanity(pattern, SEED_PUBLIC_KEY, webhookData);
     console.log(`Found match! Address: 0x${address}`);
     
     const finalPrivateKey = addPrivateKeys(SEED_PRIVATE_KEY, privateKeyOffset);
@@ -172,8 +164,8 @@ async function processJob(jobId, pattern, webhookData) {
       result: {
         derivedPrivateKey: '0x' + finalPrivateKey,
         derivedPublicKey: '0x' + finalPublicKey,
-        derivedAddress: '0x' + address,
-        txHash
+        derivedAddress: '0x' + address
+        // txHash removed - transfers disabled
       }
     });
     

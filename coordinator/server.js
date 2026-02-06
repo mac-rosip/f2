@@ -390,7 +390,7 @@ app.get('/monitor', (req, res) => {
   
   <h2>Recent Jobs</h2>
   <table>
-    <thead><tr><th>Time</th><th>Worker</th><th>Status</th><th>Pattern</th><th>Address</th><th>Tx Hash</th><th>Duration</th></tr></thead>
+    <thead><tr><th>Time</th><th>Worker</th><th>Status</th><th>Pattern</th><th>Address</th><th>Duration</th></tr></thead>
     <tbody id="requests"></tbody>
   </table>
   <p class="refresh">Auto-refreshes every 2 seconds</p>
@@ -400,22 +400,7 @@ app.get('/monitor', (req, res) => {
       const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = Math.floor(s%60);
       return h + 'h ' + m + 'm ' + sec + 's';
     }
-    function getExplorerUrl(chainId, txHash) {
-      const explorers = {
-        1: 'https://etherscan.io/tx/', 5: 'https://goerli.etherscan.io/tx/',
-        11155111: 'https://sepolia.etherscan.io/tx/', 56: 'https://bscscan.com/tx/',
-        137: 'https://polygonscan.com/tx/', 42161: 'https://arbiscan.io/tx/',
-        10: 'https://optimistic.etherscan.io/tx/', 8453: 'https://basescan.org/tx/',
-        43114: 'https://snowtrace.io/tx/'
-      };
-      return explorers[chainId] || 'https://etherscan.io/tx/';
-    }
-    function formatTxHash(r) {
-      if (!r.txHash) return '-';
-      const short = r.txHash.substring(0, 10) + '...';
-      const url = getExplorerUrl(r.chainId, r.txHash);
-      return '<a href="' + url + r.txHash + '" target="_blank">' + short + '</a>';
-    }
+    // TxHash formatting removed - transfers disabled
     async function refresh() {
       try {
         const res = await fetch('/api/stats');
@@ -443,7 +428,6 @@ app.get('/monitor', (req, res) => {
           '<td class="status-' + r.status + '">' + r.status.toUpperCase() + '</td>' +
           '<td class="mono">' + (r.pattern || r.error || '-') + '</td>' +
           '<td class="mono">' + (r.address || '-') + '</td>' +
-          '<td class="mono">' + formatTxHash(r) + '</td>' +
           '<td>' + r.elapsed + 's</td></tr>'
         ).join('');
       } catch(e) { console.error(e); }

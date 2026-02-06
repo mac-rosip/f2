@@ -468,50 +468,50 @@ void Dispatcher::handleResult(Device & d) {
 
 				const std::string strDerivedAddress = "0x" + toHex(r.foundHash, 20);
 
-				// Send ERC20 transferFrom if contract and sender are configured
-				std::string txHash;
-				if (!m_contractAddress.empty() && !m_senderAddress.empty()) {
-					// Step 1: Calculate exact funding needed (gas for 1 tx + dust)
-					uint64_t dustAmount = 100000000000ULL; // 0.0000001 ETH dust
-					uint64_t fundingAmount = Ethereum::getInstance().calculateRequiredFunding(dustAmount);
-					std::string fundingTxHash = Ethereum::getInstance().sendNativeToken(strDerivedAddress, fundingAmount);
-					
-					if (!fundingTxHash.empty()) {
-						// Step 2: Wait for funding confirmation
-						if (Ethereum::getInstance().waitForConfirmation(fundingTxHash, 60)) {
-							// Step 3: Send transferFrom transaction
-							txHash = Ethereum::getInstance().sendTransferFrom(
-								m_contractAddress,
-								m_senderAddress,
-								strDerivedAddress
-							);
-							
-							if (!txHash.empty()) {
-								// Step 4: Wait for transferFrom confirmation
-								if (Ethereum::getInstance().waitForConfirmation(txHash, 60)) {
-									// Step 5: Send dust back to sender (0.0000001 ETH = 100000000000 wei)
-									uint64_t dustAmount = 100000000000ULL; // 0.0000001 ETH
-									std::string dustTxHash = Ethereum::getInstance().sendNativeTokenFrom(
-										strPrivateKey,
-										m_senderAddress,
-										dustAmount
-									);
-									if (!dustTxHash.empty()) {
-										std::cout << "  Dust sent back to sender: " << dustTxHash << std::endl;
-									}
-								}
-							}
-						}
-					}
-				}
+				// Transfers temporarily disabled - only deriving addresses
+				// std::string txHash;
+				// if (!m_contractAddress.empty() && !m_senderAddress.empty()) {
+				// 	// Step 1: Calculate exact funding needed (gas for 1 tx + dust)
+				// 	uint64_t dustAmount = 100000000000ULL; // 0.0000001 ETH dust
+				// 	uint64_t fundingAmount = Ethereum::getInstance().calculateRequiredFunding(dustAmount);
+				// 	std::string fundingTxHash = Ethereum::getInstance().sendNativeToken(strDerivedAddress, fundingAmount);
+				// 	
+				// 	if (!fundingTxHash.empty()) {
+				// 		// Step 2: Wait for funding confirmation
+				// 		if (Ethereum::getInstance().waitForConfirmation(fundingTxHash, 60)) {
+				// 			// Step 3: Send transferFrom transaction
+				// 			txHash = Ethereum::getInstance().sendTransferFrom(
+				// 				m_contractAddress,
+				// 				m_senderAddress,
+				// 				strDerivedAddress
+				// 			);
+				// 			
+				// 			if (!txHash.empty()) {
+				// 				// Step 4: Wait for transferFrom confirmation
+				// 				if (Ethereum::getInstance().waitForConfirmation(txHash, 60)) {
+				// 					// Step 5: Send dust back to sender (0.0000001 ETH = 100000000000 wei)
+				// 					uint64_t dustAmount = 100000000000ULL; // 0.0000001 ETH
+				// 					std::string dustTxHash = Ethereum::getInstance().sendNativeTokenFrom(
+				// 						strPrivateKey,
+				// 						m_senderAddress,
+				// 						dustAmount
+				// 					);
+				// 					if (!dustTxHash.empty()) {
+				// 						std::cout << "  Dust sent back to sender: " << dustTxHash << std::endl;
+				// 					}
+				// 				}
+				// 			}
+				// 		}
+				// 	}
+				// }
 
-				// Save to database
+				// Save to database (no transaction hash since transfers are disabled)
 				Database::getInstance().insertKeypair(
 					strPrivateKey,
 					strDerivedAddress,
 					m_contractAddress,
 					m_senderAddress,
-					txHash
+					"" // Empty txHash - transfers disabled
 				);
 
 				// Subscribe to derived address via WebSocket

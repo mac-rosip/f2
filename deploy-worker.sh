@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-COORDINATOR_URL="http://64.247.196.44:3000"
+COORDINATOR_URL="${1:-http://64.247.196.44:3000}"
 SEED_PRIVATE_KEY="897db37545c1243aa92a8bc3e255c21223efcc35e6a8e6026f5d93f62daea176"
 SEED_PUBLIC_KEY="c7ddbd15c5c72c72bad1a9d116aaff6afda64c939edb27ad1e7abdb48124e0a5899fdcf2d3ce5020f1ce3cb48199d4890df81070a7c1c8d59cba6209f1d4c4d6"
 WORKER_ID="worker-$(hostname)-$(head /dev/urandom | tr -dc a-f0-9 | head -c 8)"
