@@ -11,7 +11,7 @@ const DOWNSTREAM_URL = process.env.DOWNSTREAM_URL || '';
 // Worker registry
 const workers = new Map(); // workerId -> { status, lastSeen, activeJobs: Set }
 const WORKER_TIMEOUT_MS = 30000;
-const MAX_JOBS_PER_WORKER = 5;
+const MAX_JOBS_PER_WORKER = 1;
 
 // Job queue and tracking
 const jobQueue = [];
@@ -78,9 +78,9 @@ function dispatchJobs() {
 function extractPattern(rField) {
   const cleaned = rField.toLowerCase().replace(/^0x/, '');
   const first4 = cleaned.substring(0, 4);
-  const last4 = cleaned.substring(cleaned.length - 4);
-  const middleLength = 40 - 4 - 4;
-  return first4 + 'X'.repeat(middleLength) + last4;
+  const last3 = cleaned.substring(cleaned.length - 3);
+  const middleLength = 40 - 4 - 3;
+  return first4 + 'X'.repeat(middleLength) + last3;
 }
 
 // API Endpoints
