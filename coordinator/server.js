@@ -11,7 +11,7 @@ const DOWNSTREAM_URL = process.env.DOWNSTREAM_URL || '';
 // Worker registry
 const workers = new Map(); // workerId -> { status, lastSeen, activeJobs: Set }
 const WORKER_TIMEOUT_MS = 30000;
-const MAX_JOBS_PER_WORKER = 1;
+const MAX_JOBS_PER_WORKER = 20;
 
 // Job queue and tracking
 const jobQueue = [];
@@ -143,7 +143,8 @@ app.post('/api/worker/complete', async (req, res) => {
   const job = activeJobs.get(jobId);
   if (job) {
     activeJobs.delete(jobId);
-    const elapsed = ((Date.now() - job.startTime) / 1000).toFixed(2);
+    const elapsed = ((Date.now() - (job.dispatchTime || job.startTime)) / 1000).toFixed(2);
+    const queueWait = job.dispatchTime ? ((job.dispatchTime - job.startTime) / 1000).toFixed(2) : '0';
     
     if (success) {
       stats.successCount++;
