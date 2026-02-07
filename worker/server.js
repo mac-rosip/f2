@@ -28,7 +28,7 @@ const SEED_PRIVATE_KEY = process.env.SEED_PRIVATE_KEY;
 const SEED_PUBLIC_KEY = process.env.SEED_PUBLIC_KEY;
 const PROFANITY_PATH = process.env.PROFANITY_PATH || '/app/profanity2/profanity2.x64';
 const TIMEOUT_SECONDS = parseInt(process.env.TIMEOUT_SECONDS || '300');
-const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || '1000');
+const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || '100');
 
 const CURVE_ORDER = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
 
